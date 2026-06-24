@@ -1,5 +1,5 @@
 import User from "../models/userSchema.js";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 import generateToken from "../utils/generateToken.js";
 
 // ================================
@@ -17,14 +17,18 @@ export const registerUser = async (req, res) => {
 
     // hash password
     const hashedPassword = await bcrypt.hash(password, 10);
-
+    const otp = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
     const user = new User({
       name,
       email,
       phone,
       password: hashedPassword,
       role: "applicant",
-      status: "pending"
+      status: "pending",
+      otp,
+      otpExpiry: Date.now() + 10 * 60 * 1000
     });
 
     await user.save();
@@ -39,6 +43,88 @@ export const registerUser = async (req, res) => {
   }
 };
 
+// ================================
+// 📥 verifyEmail
+// ================================
+
+export const verifyEmail = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    if (user.otp !== otp) {
+      return res.status(400).json({
+        message: "Invalid OTP"
+      });
+    }
+
+    if (user.otpExpiry < Date.now()) {
+      return res.status(400).json({
+        message: "OTP expired"
+      });
+    }
+
+    user.emailVerified = true;
+    user.otp = null;
+    user.otpExpiry = null;
+
+    await user.save();
+
+    res.status(200).json({
+      message: "Email verified successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message
+    });
+  }
+};
+
+// ================================
+// 📥 resendVerification Email
+// ================================
+
+export const resendVerification = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found"
+      });
+    }
+
+    const otp = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+
+    user.otp = otp;
+    user.otpExpiry = Date.now() + 10 * 60 * 1000;
+
+    await user.save();
+
+    // send email here
+
+    res.status(200).json({
+      message: "New OTP sent successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      message: error.message
+    });
+  }
+};
 
 // ================================
 // 📥 GET ALL USERS (ADMIN)
@@ -121,9 +207,6 @@ export const deleteUser = async (req, res) => {
 
 
 
-import User from "../models/User.js";
-import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 
 
 // ================================
@@ -153,6 +236,11 @@ export const loginUser = async (req, res) => {
         message: "Invalid credentials"
       });
     }
+      if (!user.emailVerified) {
+        return res.status(400).json({
+          message: "Please verify your email first"
+        });
+      }
 
     // 3. Generate token (from utility)
     const token = generateToken(user);

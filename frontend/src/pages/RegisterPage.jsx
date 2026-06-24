@@ -3,12 +3,15 @@ import axios from "axios";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { motion, AnimatePresence } from "framer-motion";
-
+import { useNavigate } from "react-router-dom";
+const BackendUrl = import.meta.env.VITE_BACKEND_URL;
 const Register = () => {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+  const [showPassword, setShowPassword] = useState(false); // State for password visibility
 
+  const nav=useNavigate()
   const formik = useFormik({
     initialValues: {
       name: "",
@@ -35,29 +38,38 @@ const Register = () => {
         .required("Password is required")
     }),
 
-    onSubmit: async (values, { resetForm }) => {
-      setLoading(true);
-      setServerError("");
+   onSubmit: async (values, { resetForm }) => {
+  setLoading(true);
+  setServerError("");
+  setSuccessMessage("");
+
+  try {
+    const res = await axios.post(
+      `${BackendUrl}/user/register`,
+      values
+    );
+
+    setSuccessMessage(res.data.message || "Registration successful!");
+    resetForm();
+    
+    // Store email for verification page
+    localStorage.setItem("registrationEmail", values.email);
+    
+    // Auto-clear success message after 2 seconds and redirect
+    setTimeout(() => {
       setSuccessMessage("");
+      // Redirect to email verification page
+      nav("/verify-email", { 
+        state: { email: values.email } 
+      });
+    }, 2000);
 
-      try {
-        const res = await axios.post(
-          "http://localhost:5000/api/users/register",
-          values
-        );
-
-        setSuccessMessage(res.data.message || "Registration successful!");
-        resetForm();
-        
-        // Auto-clear success message after 5 seconds
-        setTimeout(() => setSuccessMessage(""), 5000);
-
-      } catch (error) {
-        setServerError(error.response?.data?.message || "Something went wrong");
-      } finally {
-        setLoading(false);
-      }
-    }
+  } catch (error) {
+    setServerError(error.response?.data?.message || "Something went wrong");
+  } finally {
+    setLoading(false);
+  }
+}
   });
 
   // Animation variants
@@ -77,6 +89,11 @@ const Register = () => {
   const inputVariants = {
     focus: { scale: 1.01, transition: { duration: 0.2 } },
     blur: { scale: 1, transition: { duration: 0.2 } }
+  };
+
+  // Toggle password visibility
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -259,20 +276,20 @@ const Register = () => {
               </AnimatePresence>
             </motion.div>
 
-            {/* Password Field */}
+            {/* Password Field with Eye Button */}
             <motion.div variants={itemVariants} className="relative">
               <div className="relative">
                 <motion.input
                   whileFocus="focus"
                   whileBlur="blur"
                   variants={inputVariants}
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   name="password"
                   placeholder="Password"
                   onChange={formik.handleChange}
                   onBlur={formik.handleBlur}
                   value={formik.values.password}
-                  className={`w-full px-4 py-3.5 pl-12 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all duration-300 ${
+                  className={`w-full px-4 py-3.5 pl-12 pr-12 bg-white/5 border rounded-xl text-white placeholder-gray-400 focus:outline-none focus:ring-2 transition-all duration-300 ${
                     formik.touched.password && formik.errors.password
                       ? 'border-red-500/50 focus:ring-red-500/30'
                       : 'border-white/10 focus:ring-amber-400/50 focus:border-transparent'
@@ -281,6 +298,27 @@ const Register = () => {
                 <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">
                   🔒
                 </span>
+                
+                {/* Eye Button */}
+                <button
+                  type="button"
+                  onClick={togglePasswordVisibility}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-amber-400 transition-colors duration-200 focus:outline-none"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                      <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A10.014 10.014 0 0019.542 10C18.268 5.943 14.478 3 10 3a9.958 9.958 0 00-4.512 1.074l-1.78-1.781zm4.261 4.261l1.514 1.514a2.003 2.003 0 012.45 2.45l1.514 1.514a4 4 0 00-5.478-5.478z" clipRule="evenodd" />
+                      <path d="M12.954 11.616L10.85 9.512a2.002 2.002 0 012.104 2.104z" />
+                      <path d="M12.954 11.616L10.85 9.512a2.002 2.002 0 012.104 2.104z" />
+                    </svg>
+                  )}
+                </button>
               </div>
               <AnimatePresence mode="wait">
                 {formik.touched.password && formik.errors.password && (
@@ -355,7 +393,9 @@ const Register = () => {
             {/* Login Link */}
             <motion.p variants={itemVariants} className="text-center text-gray-400 text-sm mt-4">
               Already have an account?{' '}
-              <span className="text-amber-400 hover:text-amber-300 cursor-pointer transition-colors font-medium hover:underline">
+              <span
+              onClick={()=>{nav("/login")}}
+              className="text-amber-400 hover:text-amber-300 cursor-pointer transition-colors font-medium hover:underline">
                 Sign in
               </span>
             </motion.p>

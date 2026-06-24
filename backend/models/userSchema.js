@@ -43,10 +43,15 @@ const userSchema = new mongoose.Schema(
       default: false
     },
 
-    verificationToken: {
-      type: String
-    },
+    otp: {
+  type: String,
+  default: null
+},
 
+otpExpiry: {
+  type: Date,
+  default: null
+},
     // 👤 Personal Info
     dateOfBirth: {
       type: Date

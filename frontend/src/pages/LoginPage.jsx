@@ -3,12 +3,15 @@ import axios from "axios";
 import { useFormik } from "formik";
 import * as Yup from "yup";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+const BackendUrl = import.meta.env.VITE_BACKEND_URL;
+
 
 const Login = () => {
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
-
+  const nav=useNavigate()
   const formik = useFormik({
     initialValues: {
       email: "",
@@ -32,8 +35,8 @@ const Login = () => {
 
       try {
         const res = await axios.post(
-          "http://localhost:2000/api/users/login",
-          values
+          `${BackendUrl}/user/login`,
+          values,{withCredentials:true}
         );
 
         setSuccessMessage(res.data.message || "Login successful!");
@@ -278,7 +281,8 @@ const Login = () => {
                   Logging in...
                 </span>
               ) : (
-                <span className="flex items-center justify-center gap-2">
+                <span
+                className="flex items-center justify-center gap-2">
                   Login
                   <span className="text-lg">→</span>
                 </span>
@@ -288,7 +292,9 @@ const Login = () => {
             {/* Register Link */}
             <motion.p variants={itemVariants} className="text-center text-gray-400 text-sm mt-4">
               Don't have an account?{' '}
-              <span className="text-amber-400 hover:text-amber-300 cursor-pointer transition-colors font-medium hover:underline">
+              <span
+              onClick={()=>{nav("/register")}}
+              className="text-amber-400 hover:text-amber-300 cursor-pointer transition-colors font-medium hover:underline">
                 Create one
               </span>
             </motion.p>
