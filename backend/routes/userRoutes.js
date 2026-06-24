@@ -6,7 +6,10 @@ import {
   getUserById,
   updateUser,
   deleteUser,
-  loginUser
+  loginUser,
+  logoutUser,
+  verifyEmail,
+resendVerification,
 } from "../controller/userController.js"
 
 const userRouter = express.Router();
@@ -17,7 +20,7 @@ const userRouter = express.Router();
 // ================================
 userRouter.post("/register", registerUser);
 userRouter.post("/login", loginUser);
-
+userRouter.post("/logout", logoutUser);
 
 // ================================
 // 👤 USER CRUD ROUTES
@@ -35,5 +38,7 @@ userRouter.put("/:id", updateUser);
 // Delete user
 userRouter.delete("/:id", deleteUser);
 
+userRouter.post("/verify-email", verifyEmail);
+userRouter.post("/resend-verification", resendVerification);
 
 export default userRouter;

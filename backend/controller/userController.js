@@ -1,7 +1,7 @@
 import User from "../models/userSchema.js";
 import bcrypt from "bcrypt";
 import generateToken from "../utils/generateToken.js";
-
+import { sendOTPEmail } from "../utils/sendEmail.js";
 // ================================
 // 👤 REGISTER USER (ONLY BASIC INFO)
 // ================================
@@ -32,7 +32,7 @@ export const registerUser = async (req, res) => {
     });
 
     await user.save();
-
+    await sendOTPEmail(email, otp);
     res.status(201).json({
       message: "User registered successfully",
       user
@@ -113,7 +113,8 @@ export const resendVerification = async (req, res) => {
 
     await user.save();
 
-    // send email here
+    await sendOTPEmail(email, otp);
+    
 
     res.status(200).json({
       message: "New OTP sent successfully"
@@ -219,7 +220,6 @@ export const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // 1. Find user
     const user = await User.findOne({ email });
 
     if (!user) {
@@ -228,7 +228,6 @@ export const loginUser = async (req, res) => {
       });
     }
 
-    // 2. Check password
     const isMatch = await bcrypt.compare(password, user.password);
 
     if (!isMatch) {
@@ -236,16 +235,23 @@ export const loginUser = async (req, res) => {
         message: "Invalid credentials"
       });
     }
-      if (!user.emailVerified) {
-        return res.status(400).json({
-          message: "Please verify your email first"
-        });
-      }
 
-    // 3. Generate token (from utility)
+    if (!user.emailVerified) {
+      return res.status(400).json({
+        message: "Please verify your email first"
+      });
+    }
+
     const token = generateToken(user);
 
-    // 4. Response
+    // Send JWT in cookie
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax", // use "none" if frontend and backend are on different domains with HTTPS
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
     res.status(200).json({
       message: "Login successful",
       token,
@@ -260,6 +266,27 @@ export const loginUser = async (req, res) => {
 
   } catch (error) {
     res.status(500).json({
+      message: error.message
+    });
+  }
+};
+
+export const logoutUser = (req, res) => {
+  try {
+    res.clearCookie("token", {
+      httpOnly: true,
+      secure: false,
+      sameSite: "lax"
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Logged out successfully"
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
       message: error.message
     });
   }

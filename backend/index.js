@@ -4,7 +4,7 @@ import express from 'express'
 import connectdb from './config/db.js'
 import mainRoute from './routes/mainRoutes.js'
 import cors from 'cors'
-
+import cookieParser from "cookie-parser";
 
 const app=express()
 app.use(express.json())
@@ -15,6 +15,7 @@ const frontend={
     credentials:true
 }
 app.use(cors(frontend))
+app.use(cookieParser());
 app.use("/api",mainRoute)
 app.get("/",(req,res)=>{
  res.send("this is backend ")

@@ -1,20 +1,21 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate, useLocation } from "react-router-dom";
+import { useFormik } from "formik";
+import * as Yup from "yup";
 import axios from "axios";
 
 const BackendUrl = import.meta.env.VITE_BACKEND_URL;
 
 const EmailVerification = () => {
   const [email, setEmail] = useState("");
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
   const [serverError, setServerError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [timer, setTimer] = useState(60);
   const [canResend, setCanResend] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState("pending"); // pending, success, failed
+  const [verificationStatus, setVerificationStatus] = useState("pending");
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,7 +26,6 @@ const EmailVerification = () => {
     if (userEmail) {
       setEmail(userEmail);
     } else {
-      // If no email, redirect back to register
       navigate("/register");
     }
   }, [location, navigate]);
@@ -43,13 +43,65 @@ const EmailVerification = () => {
     return () => clearInterval(interval);
   }, [timer, canResend]);
 
-  // Handle OTP input change
+  // Formik setup
+  const formik = useFormik({
+    initialValues: {
+      otp: ["", "", "", "", "", ""]
+    },
+    validationSchema: Yup.object({
+      otp: Yup.array()
+        .of(Yup.string().matches(/^[0-9]$/, "Must be a number"))
+        .test("len", "Please enter complete 6-digit code", (val) => {
+          if (!val) return false;
+          return val.every(digit => digit !== "") && val.length === 6;
+        })
+    }),
+    validateOnChange: true,
+    validateOnBlur: true,
+    onSubmit: async (values, { setSubmitting }) => {
+      setLoading(true);
+      setServerError("");
+      setSuccessMessage("");
+
+      const otpString = values.otp.join("");
+
+      try {
+        const response = await axios.post(`${BackendUrl}/user/verify-email`, {
+          email,
+          otp: otpString
+        });
+
+        setSuccessMessage(response.data.message || "Email verified successfully!");
+        setVerificationStatus("success");
+        
+        localStorage.removeItem("registrationEmail");
+        
+        setTimeout(() => {
+          navigate("/login", { 
+            state: { 
+              message: "Email verified successfully! Please login." 
+            }
+          });
+        }, 3000);
+
+      } catch (error) {
+        setServerError(error.response?.data?.message || "Invalid verification code");
+        setVerificationStatus("failed");
+        setSubmitting(false);
+      } finally {
+        setLoading(false);
+      }
+    }
+  });
+
+  // Handle OTP input change with Formik
   const handleOtpChange = (index, value) => {
     if (value.length > 1) return;
     
-    const newOtp = [...otp];
+    const newOtp = [...formik.values.otp];
     newOtp[index] = value;
-    setOtp(newOtp);
+    formik.setFieldValue("otp", newOtp);
+    formik.setFieldTouched("otp", true);
 
     // Auto-focus next input
     if (value && index < 5) {
@@ -60,7 +112,7 @@ const EmailVerification = () => {
 
   // Handle keydown for backspace
   const handleKeyDown = (index, e) => {
-    if (e.key === "Backspace" && !otp[index] && index > 0) {
+    if (e.key === "Backspace" && !formik.values.otp[index] && index > 0) {
       const prevInput = document.getElementById(`otp-${index - 1}`);
       if (prevInput) prevInput.focus();
     }
@@ -70,55 +122,14 @@ const EmailVerification = () => {
   const handlePaste = (e) => {
     e.preventDefault();
     const pastedData = e.clipboardData.getData("text").slice(0, 6).split("");
-    const newOtp = [...otp];
+    const newOtp = [...formik.values.otp];
     pastedData.forEach((char, index) => {
-      if (index < 6) newOtp[index] = char;
+      if (index < 6 && /^[0-9]$/.test(char)) {
+        newOtp[index] = char;
+      }
     });
-    setOtp(newOtp);
-  };
-
-  // Submit verification
-  const handleVerify = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setServerError("");
-    setSuccessMessage("");
-
-    const otpString = otp.join("");
-
-    if (otpString.length !== 6) {
-      setServerError("Please enter the complete 6-digit verification code");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await axios.post(`${BackendUrl}/user/verify-email`, {
-        email,
-        otp: otpString
-      });
-
-      setSuccessMessage(response.data.message || "Email verified successfully!");
-      setVerificationStatus("success");
-      
-      // Clear registration email from localStorage
-      localStorage.removeItem("registrationEmail");
-      
-      // Redirect to login after 3 seconds
-      setTimeout(() => {
-        navigate("/login", { 
-          state: { 
-            message: "Email verified successfully! Please login." 
-          }
-        });
-      }, 3000);
-
-    } catch (error) {
-      setServerError(error.response?.data?.message || "Invalid verification code");
-      setVerificationStatus("failed");
-    } finally {
-      setLoading(false);
-    }
+    formik.setFieldValue("otp", newOtp);
+    formik.setFieldTouched("otp", true);
   };
 
   // Resend OTP
@@ -135,7 +146,8 @@ const EmailVerification = () => {
       setSuccessMessage(response.data.message || "New verification code sent!");
       setTimer(60);
       setCanResend(false);
-      setOtp(["", "", "", "", "", ""]);
+      formik.setFieldValue("otp", ["", "", "", "", "", ""]);
+      formik.setFieldTouched("otp", false);
       // Focus on first input
       document.getElementById("otp-0")?.focus();
 
@@ -159,6 +171,19 @@ const EmailVerification = () => {
     hidden: { opacity: 0, y: 20 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.4 } }
   };
+
+  // Get OTP error
+  const getOtpError = () => {
+    if (formik.touched.otp && formik.errors.otp) {
+      if (Array.isArray(formik.errors.otp)) {
+        return "Please enter valid numbers";
+      }
+      return formik.errors.otp;
+    }
+    return null;
+  };
+
+  const otpError = getOtpError();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 relative overflow-hidden">
@@ -237,6 +262,7 @@ const EmailVerification = () => {
             <div className="flex items-center justify-center gap-2 mt-3">
               <span className="text-xs text-gray-500">Didn't receive the code?</span>
               <button
+                type="button"
                 onClick={handleResendOTP}
                 disabled={!canResend || resendLoading}
                 className={`text-xs font-medium transition-colors ${
@@ -250,11 +276,11 @@ const EmailVerification = () => {
             </div>
           </motion.div>
 
-          <form onSubmit={handleVerify} className="space-y-6">
+          <form onSubmit={formik.handleSubmit} className="space-y-6">
             {/* OTP Inputs */}
             <motion.div variants={itemVariants}>
               <div className="flex justify-center gap-2 sm:gap-3">
-                {otp.map((digit, index) => (
+                {formik.values.otp.map((digit, index) => (
                   <input
                     key={index}
                     id={`otp-${index}`}
@@ -264,18 +290,28 @@ const EmailVerification = () => {
                     onChange={(e) => handleOtpChange(index, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(index, e)}
                     onPaste={handlePaste}
+                    onBlur={formik.handleBlur}
                     className={`w-12 h-14 sm:w-14 sm:h-16 text-center text-2xl font-bold text-white bg-white/5 border rounded-xl focus:outline-none focus:ring-2 transition-all duration-300 ${
-                      serverError && verificationStatus === "failed"
+                      otpError && formik.touched.otp
                         ? 'border-red-500/50 focus:ring-red-500/30'
-                        : successMessage && verificationStatus === "success"
+                        : verificationStatus === "success"
                         ? 'border-emerald-500/50 focus:ring-emerald-500/30'
                         : 'border-white/10 focus:ring-amber-400/50 focus:border-transparent'
                     }`}
                     autoFocus={index === 0}
-                    disabled={verificationStatus === "success"}
+                    disabled={verificationStatus === "success" || loading}
                   />
                 ))}
               </div>
+              {otpError && formik.touched.otp && (
+                <motion.p
+                  initial={{ opacity: 0, y: -5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-red-400 text-xs mt-2 text-center flex items-center justify-center gap-1"
+                >
+                  <span>⚠️</span> {otpError}
+                </motion.p>
+              )}
             </motion.div>
 
             {/* Messages */}
@@ -311,9 +347,9 @@ const EmailVerification = () => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               type="submit"
-              disabled={loading || verificationStatus === "success"}
+              disabled={loading || verificationStatus === "success" || formik.isSubmitting}
               className={`w-full py-3.5 rounded-xl font-semibold text-white transition-all duration-300 relative overflow-hidden ${
-                loading || verificationStatus === "success"
+                loading || verificationStatus === "success" || formik.isSubmitting
                   ? 'bg-amber-600/50 cursor-not-allowed'
                   : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:shadow-lg hover:shadow-amber-500/30 hover:scale-[1.02]'
               }`}
